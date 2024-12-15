@@ -50,7 +50,53 @@ def print_hough_lines(shape, lines):
     
     return cdst
 
+# Find intersection between lines
+# Ref: https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection#Given_two_points_on_each_line
+def find_intersections(lines):
+    points_on_line = []
 
+    for i in range(0, len(lines)):
+        rho = lines[i][0]
+        theta = lines[i][1]
+        a = math.cos(theta)
+        b = math.sin(theta)
+        x0 = a * rho
+        y0 = b * rho
+        points_on_line.append([int(x0 + 1280*(-b)), int(y0 + 1280*(a)), int(x0 - 1280*(-b)), int(y0 - 1280*(a))])
+    
+    points_on_line = np.array(points_on_line)
+    print(points_on_line)
+
+    #TODO: We don't need to calculate all intersections, it's enough to calculate the intersections between the vertical and horizontal lines
+    intertections = []
+    for i in range(0, len(points_on_line)):
+        for j in range(0, len(points_on_line)):
+            if i == j:
+                continue
+            p1 = points_on_line[i]
+            p2 = points_on_line[j]
+            x1 = p1[0]
+            y1 = p1[1]
+            x2 = p1[2]
+            y2 = p1[3]
+            x3 = p2[0]
+            y3 = p2[1]
+            x4 = p2[2]
+            y4 = p2[3]
+            
+            x = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2)*(x3 * y4 - y3*x4))/((x1 - x2) * (y3 - y4) - (y1 - y2)*(x3 - x4))
+            y = ((x1 *y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3*y4 - y3*x4))/((x1 - x2) * (y3 - y4) - (y1 - y2)*(x3 - x4))
+
+            if x < 0 or x > IMG_WIDTH or y < 0 or y > IMG_HEIGHT:
+                continue
+
+            if x == 0 and y == 0:
+                continue
+            if x == np.inf or y == np.inf:
+                continue
+            intertections.append([x, y])
+
+    return np.array(intertections)
 
 
 def detect_corners(img):
@@ -72,25 +118,34 @@ def detect_corners(img):
     if DEBUG:
         printed_lines = print_hough_lines(canny_img.shape, lines)
         show_and_save_image_debug(2, printed_lines)
-    
+
+    #TODO: Clustering only works well if there are only lines of the paper detected. Somehow outliers need to be removed
     kmeans = KMeans(n_clusters=4)
     kmeans.fit(mapped_lines)
 
-    clustered_Lines = kmeans.cluster_centers_
-
+    lines = kmeans.cluster_centers_
     if DEBUG:
-        printed_lines = print_hough_lines(canny_img.shape, clustered_Lines)
+        printed_lines = print_hough_lines(canny_img.shape, lines)
         show_and_save_image_debug(3, printed_lines)
 
+    intersections = find_intersections(lines)
 
-    return lines
+    kmeans.fit(intersections)
+    intersections = np.array(kmeans.cluster_centers_, dtype="uint32")
+
+    if DEBUG:
+        plt.imshow(img, cmap="gray")
+        plt.scatter(intersections[:, 0], intersections[:, 1])
+        plt.savefig("debug/step4.png")
+        plt.show()
+    return intersections
 
 
 img = plt.imread("static.png") ##Todo replace with live image
 img = np.array(cv.cvtColor(img, cv.COLOR_BGR2GRAY) * 255, dtype="uint8")
 
-lines = detect_corners(img)
-print(lines)
+corners = detect_corners(img)
+print(corners)
 
 plt.imshow(img, cmap="gray")
 plt.show()
