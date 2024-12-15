@@ -141,11 +141,30 @@ def detect_corners(img):
     return intersections
 
 
+def transform_homography(img, corners):
+    #order corners
+    corners = corners[corners[:,0].argsort()]
+    left = np.array([corners[0], corners[1]])
+    right = np.array([corners[2], corners[3]])
+    left = left[left[:,1].argsort()]
+    right = right[right[:,1].argsort()]
+    corners = np.array([left[0], left[1], right[0], right[1]], dtype="float32")
+
+    print(corners)
+
+    transform_mat = cv.getPerspectiveTransform(corners, np.array([[0,0], [0, IMG_HEIGHT -1], [IMG_WIDTH - 1, 0], [IMG_WIDTH - 1, IMG_HEIGHT -1]], dtype="float32"))
+    dst = cv.warpPerspective(img, transform_mat, (IMG_WIDTH, IMG_HEIGHT), flags=cv.INTER_LINEAR)
+    
+    if DEBUG:
+        show_and_save_image_debug(5, dst)
+
+
 img = plt.imread("static.png") ##Todo replace with live image
 img = np.array(cv.cvtColor(img, cv.COLOR_BGR2GRAY) * 255, dtype="uint8")
 
 corners = detect_corners(img)
-print(corners)
+
+img_transformed = transform_homography(img, corners)
 
 plt.imshow(img, cmap="gray")
 plt.show()
