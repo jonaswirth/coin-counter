@@ -14,7 +14,6 @@ IMG_WIDTH = 1280
 debug_step = 1
 
 def main():
-    print("..")
     #cv.namedWindow("cam", cv.WINDOW_NORMAL)
     cap = cv.VideoCapture(1, cv.CAP_DSHOW)
     ret = cap.set(cv.CAP_PROP_FRAME_WIDTH, 1280)
@@ -76,7 +75,6 @@ def find_intersections(lines):
         points_on_line.append([int(x0 + 1280*(-b)), int(y0 + 1280*(a)), int(x0 - 1280*(-b)), int(y0 - 1280*(a))])
     
     points_on_line = np.array(points_on_line)
-    print(points_on_line)
 
     #TODO: We don't need to calculate all intersections, it's enough to calculate the intersections between the vertical and horizontal lines
     intertections = []
@@ -122,7 +120,6 @@ def detect_corners(img):
         theta = lines[i][0][1]
         mapped_lines.append([rho, theta])
     
-    print(mapped_lines)
     lines = mapped_lines
     
     printed_lines = print_hough_lines(canny_img.shape, lines)
@@ -160,16 +157,14 @@ def transform_homography(img, corners):
     right = right[right[:,1].argsort()]
     corners = np.array([left[0], left[1], right[0], right[1]], dtype="float32")
 
-    print(corners)
-
-    transform_mat = cv.getPerspectiveTransform(corners, np.array([[0,0], [0, IMG_HEIGHT -1], [IMG_WIDTH - 1, 0], [IMG_WIDTH - 1, IMG_HEIGHT -1]], dtype="float32"))
-    dst = cv.warpPerspective(img, transform_mat, (IMG_WIDTH, IMG_HEIGHT), flags=cv.INTER_LINEAR)
+    transform_mat = cv.getPerspectiveTransform(corners, np.array([[0,0], [0, IMG_HEIGHT -1], [1018, 0], [1018, IMG_HEIGHT -1]], dtype="float32"))
+    dst = cv.warpPerspective(img, transform_mat, (1018, IMG_HEIGHT), flags=cv.INTER_LINEAR)
     
     log_step(dst, cmap="viridis")
     return dst
 
 #Returns a mask for the outline of the coins aswell as the centers of each coin
-def mask_coins(img):
+def find_coins(img):
     #Threshold the image
     gray = np.array(cv.cvtColor(img,cv.COLOR_BGR2GRAY) * 255, dtype="uint8")
     ret, thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)
@@ -191,18 +186,24 @@ def mask_coins(img):
     markers = markers + 1
     markers[unknown == 255] = 0
 
+    markers = cv.watershed(img, markers)
+
     log_step(markers, cmap="prism")
 
-    markers = cv.watershed(img, markers)
+    areas = np.unique(markers, return_counts=True)
     #Create the mask
-    mask = np.zeros((IMG_HEIGHT, IMG_WIDTH))
+    mask = np.zeros((IMG_HEIGHT, 1018))
     mask[markers == -1] = 255
 
     log_step(mask)
     
-    return mask
+    return mask, np.array(areas)
 
-
+def count_coins(coins):
+    # Calculate the approximative area of the detected coins
+    for i in range(0, len(coins[0])):
+        area = coins[1][i] * 0.0850713889
+        print(area)
 
 
 img = cv.imread("static.png") ##Todo replace with live image
@@ -215,7 +216,20 @@ img_gray = np.array(cv.cvtColor(img, cv.COLOR_BGR2GRAY) * 255, dtype="uint8")
 corners = detect_corners(img_gray)
 
 img_transformed = transform_homography(img, corners)
-mask, centers = mask_coins(img_transformed)
+mask, areas = find_coins(img_transformed)
+count_coins(areas)
 
 plt.imshow(img)
 plt.show()
+
+#Size of A4: 210 x 297 mm -> 1 pixel = 210 / 720 = 0.29167 mm x 0.29167 mm => 0.0850713889 mm2
+
+# https://www.snb.ch/de/the-snb/mandates-goals/cash/coins#t00
+# 5: 31.45 mm => 776.83929 mm2
+# 2: 27.40 mm => 589.64553 mm2
+# 1: 23.20 mm => 422.73271 mm2
+# 0.5: 18.20 mm => 260.15529 mm2
+# 0.2: 21.05 mm => 348.01189 mm2
+# 0.1: 19.15 mm => 288.02318 mm2
+# 0.05: 17.15 mm => 231.00327 mm2
+
