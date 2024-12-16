@@ -238,21 +238,50 @@ img = cv.imread("static.png") ##Todo replace with live image
 
 import time
 start = time.time()
+last = start
 
 img_gray = np.array(cv.cvtColor(img, cv.COLOR_BGR2GRAY) * 255, dtype="uint8")
+
+now = time.time()
+print(f"Executed in {(now-last) * 1000} ms")
+last = now
+
 corners = detect_corners(img_gray)
 
+now = time.time()
+print(f"Corner detection in {(now-last) * 1000} ms")
+last = now
+
 img_transformed = transform_homography_image(img, corners)
+
+now = time.time()
+print(f"Homography transform in {(now-last) * 1000} ms")
+last = now
+
 mask, areas = find_coins(img_transformed)
+
+now = time.time()
+print(f"Find coins in {(now-last) * 1000} ms")
+last = now
+
 value = count_coins(areas)
+
+now = time.time()
+print(f"Count coins in {(now-last) * 1000} ms")
+last = now
+
 mask = transform_homography_mask(mask, corners)
 mask = cv.dilate(mask, np.ones((3,3), dtype="uint8"), iterations=2)
 
 highlighted_img = img
 highlighted_img[mask != 0] = [255, 0, 0]
 
+now = time.time()
+print(f"Highlight in {(now-last) * 1000} ms")
+last = now
+
 end = time.time()
-print(f"Executed in {(end-start) * 1000} ms")
+print(f"Total Executed in {(end-start) * 1000} ms")
 
 plt.title(f"Value: {value} CHF")
 plt.imshow(highlighted_img)
