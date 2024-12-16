@@ -7,8 +7,11 @@ import math
 from sklearn.cluster import KMeans
 
 DEBUG = True
+SAVE_OUTPUT = True
 IMG_HEIGHT = 720
 IMG_WIDTH = 1280
+
+debug_step = 1
 
 def main():
     print("..")
@@ -29,10 +32,18 @@ def detect_coins(img):
 #     max_indexes = np.argpartition(corners.flatten(), -4)[-4:]
 #     return unravel_index(max_indexes, img.shape)
 
-def show_and_save_image_debug(step:int, img, cmap = "gray"):
+def log_step(img, cmap = "gray"):    
+    if not DEBUG and not SAVE_OUTPUT:
+        return
+    
+    global debug_step
+    
     plt.imshow(img, cmap=cmap)
-    plt.show()
-    cv.imwrite(f"debug/step{step}.png", img)
+    if DEBUG:
+        plt.show()
+    if SAVE_OUTPUT:
+        cv.imwrite(f"debug/step{debug_step}.png", img)
+    debug_step += 1
 
 def print_hough_lines(shape, lines):
     cdst = np.zeros(shape)
@@ -102,8 +113,7 @@ def find_intersections(lines):
 def detect_corners(img):
     canny_img = cv.Canny(img, 50, 200, None, 3) #TODO: check these params
 
-    if DEBUG:
-        show_and_save_image_debug(1, canny_img)
+    log_step(canny_img)
 
     lines = cv.HoughLines(canny_img, 1, np.pi / 180, 150)
     mapped_lines = []
@@ -115,24 +125,24 @@ def detect_corners(img):
     print(mapped_lines)
     lines = mapped_lines
     
-    if DEBUG:
-        printed_lines = print_hough_lines(canny_img.shape, lines)
-        show_and_save_image_debug(2, printed_lines)
+    printed_lines = print_hough_lines(canny_img.shape, lines)
+    log_step(printed_lines)
 
     #TODO: Clustering only works well if there are only lines of the paper detected. Somehow outliers need to be removed
     kmeans = KMeans(n_clusters=4)
     kmeans.fit(mapped_lines)
 
     lines = kmeans.cluster_centers_
-    if DEBUG:
-        printed_lines = print_hough_lines(canny_img.shape, lines)
-        show_and_save_image_debug(3, printed_lines)
+
+    printed_lines = print_hough_lines(canny_img.shape, lines)
+    log_step(printed_lines)
 
     intersections = find_intersections(lines)
 
     kmeans.fit(intersections)
     intersections = np.array(kmeans.cluster_centers_, dtype="uint32")
 
+    #TODO: handle debug and save output properly
     if DEBUG:
         plt.imshow(img, cmap="gray")
         plt.scatter(intersections[:, 0], intersections[:, 1])
@@ -155,17 +165,16 @@ def transform_homography(img, corners):
     transform_mat = cv.getPerspectiveTransform(corners, np.array([[0,0], [0, IMG_HEIGHT -1], [IMG_WIDTH - 1, 0], [IMG_WIDTH - 1, IMG_HEIGHT -1]], dtype="float32"))
     dst = cv.warpPerspective(img, transform_mat, (IMG_WIDTH, IMG_HEIGHT), flags=cv.INTER_LINEAR)
     
-    if DEBUG:
-        show_and_save_image_debug(5, dst, cmap="viridis")
+    log_step(dst, cmap="viridis")
     return dst
 
-def find_coins(img):
+#Returns a mask for the outline of the coins aswell as the centers of each coin
+def mask_coins(img):
     #Threshold the image
     gray = np.array(cv.cvtColor(img,cv.COLOR_BGR2GRAY) * 255, dtype="uint8")
     ret, thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)
-    
-    if DEBUG:
-        show_and_save_image_debug(6, thresh)
+
+    log_step(thresh)
     
     #Get the starting points for the watershed
     kernel =  np.ones((3,3), dtype="uint8")
@@ -176,20 +185,22 @@ def find_coins(img):
     sure_fg = np.array(sure_fg, dtype="uint8")
     unknown = cv.subtract(sure_bg, sure_fg)
 
-    if DEBUG:
-        show_and_save_image_debug(7, sure_fg)
+    log_step(sure_fg)
     
     ret, markers = cv.connectedComponents(sure_fg)
     markers = markers + 1
     markers[unknown == 255] = 0
-    if DEBUG:
-        show_and_save_image_debug(99, markers, cmap="prism")
+
+    log_step(markers, cmap="prism")
 
     markers = cv.watershed(img, markers)
-    img[markers == -1] = [255,0,0]
+    #Create the mask
+    mask = np.zeros((IMG_HEIGHT, IMG_WIDTH))
+    mask[markers == -1] = 255
 
-    if DEBUG:
-        show_and_save_image_debug(8, img)
+    log_step(mask)
+    
+    return mask
 
 
 
@@ -204,7 +215,7 @@ img_gray = np.array(cv.cvtColor(img, cv.COLOR_BGR2GRAY) * 255, dtype="uint8")
 corners = detect_corners(img_gray)
 
 img_transformed = transform_homography(img, corners)
-find_coins(img_transformed)
+mask, centers = mask_coins(img_transformed)
 
 plt.imshow(img)
 plt.show()
