@@ -6,10 +6,22 @@ from numpy import unravel_index
 import math
 from sklearn.cluster import KMeans
 
-DEBUG = True
-SAVE_OUTPUT = True
+DEBUG = False
+SAVE_OUTPUT = False
 IMG_HEIGHT = 720
 IMG_WIDTH = 1280
+TRANSFOMRED_CORNERS = np.array([[0,0], [0, IMG_HEIGHT -1], [1018, 0], [1018, IMG_HEIGHT -1]], dtype="float32")
+
+# Maps the coins surface area to their face value
+# Taken from https://www.snb.ch/de/the-snb/mandates-goals/cash/coins#t00
+COINS = np.array([
+        [776.83929, 5],
+        [589.64553, 2],
+        [422.73271, 1],
+        [260.15529, 0.5],
+        [348.01189, 0.2],
+        [288.02318, 0.1],
+        [231.00327, 0.05]])
 
 debug_step = 1
 
@@ -145,23 +157,31 @@ def detect_corners(img):
         plt.scatter(intersections[:, 0], intersections[:, 1])
         plt.savefig("debug/step4.png")
         plt.show()
-    return intersections
-
-
-def transform_homography(img, corners):
+    
     #order corners
-    corners = corners[corners[:,0].argsort()]
-    left = np.array([corners[0], corners[1]])
-    right = np.array([corners[2], corners[3]])
+    intersections = intersections[intersections[:,0].argsort()]
+    left = np.array([intersections[0], intersections[1]])
+    right = np.array([intersections[2], intersections[3]])
     left = left[left[:,1].argsort()]
     right = right[right[:,1].argsort()]
-    corners = np.array([left[0], left[1], right[0], right[1]], dtype="float32")
+    return np.array([left[0], left[1], right[0], right[1]], dtype="float32")
 
-    transform_mat = cv.getPerspectiveTransform(corners, np.array([[0,0], [0, IMG_HEIGHT -1], [1018, 0], [1018, IMG_HEIGHT -1]], dtype="float32"))
+
+
+def transform_homography_image(img, corners):
+    transform_mat = cv.getPerspectiveTransform(corners, TRANSFOMRED_CORNERS)
     dst = cv.warpPerspective(img, transform_mat, (1018, IMG_HEIGHT), flags=cv.INTER_LINEAR)
     
     log_step(dst, cmap="viridis")
     return dst
+
+def transform_homography_mask(mask, corners):
+    transform_mat = cv.getPerspectiveTransform(TRANSFOMRED_CORNERS, corners)
+    dst = cv.warpPerspective(mask, transform_mat, (IMG_WIDTH, IMG_HEIGHT), flags=cv.INTER_LINEAR)
+    
+    log_step(dst, cmap="viridis")
+    return dst
+
 
 #Returns a mask for the outline of the coins aswell as the centers of each coin
 def find_coins(img):
@@ -201,35 +221,40 @@ def find_coins(img):
 
 def count_coins(coins):
     # Calculate the approximative area of the detected coins
+    # Size of A4: 210 x 297 mm -> 1 pixel = 210 / 720 = 0.29167 mm x 0.29167 mm => 0.0850713889 mm2
+    sum = 0
     for i in range(0, len(coins[0])):
         area = coins[1][i] * 0.0850713889
-        print(area)
+        #remove outliers
+        if area > max(COINS[:,0]) * 1.1 or area < min(COINS[:,0]) * 0.9:
+            continue
+        idx = (np.abs(COINS[:,0] - area)).argmin()
+        sum += COINS[idx, 1]
+    
+    return sum
 
 
 img = cv.imread("static.png") ##Todo replace with live image
 
-plt.imshow(img)
-plt.show()
+import time
+start = time.time()
 
 img_gray = np.array(cv.cvtColor(img, cv.COLOR_BGR2GRAY) * 255, dtype="uint8")
-
 corners = detect_corners(img_gray)
 
-img_transformed = transform_homography(img, corners)
+img_transformed = transform_homography_image(img, corners)
 mask, areas = find_coins(img_transformed)
-count_coins(areas)
+value = count_coins(areas)
+mask = transform_homography_mask(mask, corners)
+mask = cv.dilate(mask, np.ones((3,3), dtype="uint8"), iterations=2)
 
-plt.imshow(img)
+highlighted_img = img
+highlighted_img[mask != 0] = [255, 0, 0]
+
+end = time.time()
+print(f"Executed in {(end-start) * 1000} ms")
+
+plt.title(f"Value: {value} CHF")
+plt.imshow(highlighted_img)
 plt.show()
-
-#Size of A4: 210 x 297 mm -> 1 pixel = 210 / 720 = 0.29167 mm x 0.29167 mm => 0.0850713889 mm2
-
-# https://www.snb.ch/de/the-snb/mandates-goals/cash/coins#t00
-# 5: 31.45 mm => 776.83929 mm2
-# 2: 27.40 mm => 589.64553 mm2
-# 1: 23.20 mm => 422.73271 mm2
-# 0.5: 18.20 mm => 260.15529 mm2
-# 0.2: 21.05 mm => 348.01189 mm2
-# 0.1: 19.15 mm => 288.02318 mm2
-# 0.05: 17.15 mm => 231.00327 mm2
 
