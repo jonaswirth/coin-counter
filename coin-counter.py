@@ -250,10 +250,9 @@ def find_coins(img):
 
 def count_coins(coins):
     # Calculate the approximative area of the detected coins
-    # Size of A4: 210 x 297 mm -> 1 pixel = 210 / 720 = 0.29167 mm x 0.29167 mm => 0.0850713889 mm2
     sum = 0
     for i in range(1, len(coins[0])): #Label 0 is background/border so start at index 1
-        area = coins[1][i] * 0.0850713889
+        area = coins[1][i] * 0.0850713889 # Size of A4: 210 x 297 mm -> 1 pixel = 210 / 720 = 0.29167 mm x 0.29167 mm => 0.0850713889 mm2
         #remove outliers
         if area > max(COINS[:,0]) * 1.1 or area < min(COINS[:,0]) * 0.9:
             continue
@@ -263,8 +262,6 @@ def count_coins(coins):
     return sum
 
 def process_image(img):
-    start = time.time()
-
     img_gray = np.array(cv.cvtColor(img, cv.COLOR_BGR2GRAY) * 255, dtype="uint8")
 
     corners = detect_corners(img_gray)
@@ -284,8 +281,6 @@ def process_image(img):
 
     highlighted_img = cv.putText(highlighted_img, f"{value} CHF", (50,50), cv.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv.LINE_AA)
 
-    end = time.time()
-    print(f"Total Executed in {(end-start) * 1000} ms")
     global debug_step
     debug_step = 1
     return highlighted_img
