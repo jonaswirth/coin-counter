@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import math
 import time
 
-DEBUG = False
+DEBUG = True
 SAVE_OUTPUT = False
 IMG_HEIGHT = 720
 IMG_WIDTH = 1280
@@ -25,22 +25,37 @@ COINS = np.array([
 debug_step = 1
 
 def main():
+    print("Capture start")
+    #Disable debugging in live mode
+    global DEBUG
+    DEBUG = False
     #cv.namedWindow("cam", cv.WINDOW_NORMAL)
     cap = cv.VideoCapture(1, cv.CAP_DSHOW)
     ret = cap.set(cv.CAP_PROP_FRAME_WIDTH, 1280)
     ret = cap.set(cv.CAP_PROP_FRAME_HEIGHT, 720)
     success, img = cap.read()
-    plt.imshow(img)
-    cv.imwrite("shot1.png", img)
-    plt.show()
+    while True:
+        sucess, img = cap.read()
+        img = process_image(img)
+        cv.imshow("Webcam", img)
 
-def detect_coins(img):
-    return
+        myKey = cv.waitKey(1)
+        if myKey & 0xFF == ord('q'):  # quit when 'q' is pressed
+            cap.release()
+            break
 
-# def detect_corners(img):
-#     corners = cv.cornerHarris(img, 3, 3, 0.04)
-#     max_indexes = np.argpartition(corners.flatten(), -4)[-4:]
-#     return unravel_index(max_indexes, img.shape)
+        if myKey & 0xFF == ord('c'):  # capture when 'q' is pressed
+            _, img = cap.read()
+            capture(img)
+    
+    cv.destroyAllWindows()
+
+def capture(img):
+    global SAVE_OUTPUT
+    SAVE_OUTPUT = True
+    img = process_image(img)
+    cv.imwrite("debug/capture.png", img)
+    SAVE_OUTPUT = False
 
 def log_step(img, cmap = "gray"):    
     if not DEBUG and not SAVE_OUTPUT:
@@ -126,6 +141,9 @@ def detect_corners(img):
 
     lines = cv.HoughLines(canny_img, 1, np.pi / 180, 150)
 
+    if lines is None or len(lines) < 4:
+        return []
+
     mapped_lines = []
     for i in range(0, len(lines)):
         rho = lines[i][0][0]
@@ -144,6 +162,9 @@ def detect_corners(img):
     log_step(printed_lines)
 
     intersections = find_intersections(lines)
+
+    if len(intersections) < 4:
+        return []
 
     _, _, intersections = cv.kmeans(intersections, 4, None, (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 10, 1.0), 10, cv.KMEANS_RANDOM_CENTERS)
     intersections = np.array(intersections, dtype="uint32")
@@ -240,6 +261,10 @@ def process_image(img):
     img_gray = np.array(cv.cvtColor(img, cv.COLOR_BGR2GRAY) * 255, dtype="uint8")
 
     corners = detect_corners(img_gray)
+
+    if len(corners) == 0:
+        return img
+
     img_transformed = transform_homography_image(img, corners)
     mask, areas = find_coins(img_transformed)
     value = count_coins(areas)
@@ -250,16 +275,20 @@ def process_image(img):
     highlighted_img = img
     highlighted_img[mask != 0] = [255, 0, 0]
 
+    highlighted_img = cv.putText(highlighted_img, f"{value} CHF", (50,50), cv.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv.LINE_AA)
+
     end = time.time()
     print(f"Total Executed in {(end-start) * 1000} ms")
-    return highlighted_img, value
+    return highlighted_img
 
 
-img = cv.imread("static.png") ##Todo replace with live image
+main()
 
-highlighted_img, value = process_image(img)
+# uncomment for static test image
+# img = cv.imread("static.png") ##Todo replace with live image
 
-plt.title(f"Value: {value} CHF")
-plt.imshow(highlighted_img)
-plt.show()
+# highlighted_img = process_image(img)
+
+# plt.imshow(highlighted_img)
+# plt.show()
 
