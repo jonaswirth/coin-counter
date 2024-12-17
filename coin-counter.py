@@ -184,7 +184,7 @@ def transform_homography_mask(mask, corners):
 def find_coins(img):
     #Threshold the image
     gray = np.array(cv.cvtColor(img,cv.COLOR_BGR2GRAY) * 255, dtype="uint8")
-    ret, thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)
+    _, thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)
 
     log_step(thresh)
     
@@ -199,20 +199,24 @@ def find_coins(img):
 
     log_step(sure_fg)
     
-    ret, markers = cv.connectedComponents(sure_fg)
+    _, markers = cv.connectedComponents(sure_fg)
     markers = markers + 1
     markers[unknown == 255] = 0
 
     markers = cv.watershed(img, markers)
+    markers[markers == 1] = 0
 
     log_step(markers, cmap="prism")
 
-    areas = np.unique(markers, return_counts=True)
     #Create the mask
     mask = np.zeros((IMG_HEIGHT, 1018))
     mask[markers == -1] = 255
 
     log_step(mask)
+
+    markers = markers - 1
+    markers[markers <= 0] = 0
+    areas = np.unique(markers, return_counts=True)
     
     return mask, np.array(areas)
 
@@ -220,7 +224,7 @@ def count_coins(coins):
     # Calculate the approximative area of the detected coins
     # Size of A4: 210 x 297 mm -> 1 pixel = 210 / 720 = 0.29167 mm x 0.29167 mm => 0.0850713889 mm2
     sum = 0
-    for i in range(0, len(coins[0])):
+    for i in range(1, len(coins[0])): #Label 0 is background/border so start at index 1
         area = coins[1][i] * 0.0850713889
         #remove outliers
         if area > max(COINS[:,0]) * 1.1 or area < min(COINS[:,0]) * 0.9:
@@ -230,28 +234,30 @@ def count_coins(coins):
     
     return sum
 
+def process_image(img):
+    start = time.time()
+
+    img_gray = np.array(cv.cvtColor(img, cv.COLOR_BGR2GRAY) * 255, dtype="uint8")
+
+    corners = detect_corners(img_gray)
+    img_transformed = transform_homography_image(img, corners)
+    mask, areas = find_coins(img_transformed)
+    value = count_coins(areas)
+
+    mask = transform_homography_mask(mask, corners)
+    mask = cv.dilate(mask, np.ones((3,3), dtype="uint8"), iterations=1)
+
+    highlighted_img = img
+    highlighted_img[mask != 0] = [255, 0, 0]
+
+    end = time.time()
+    print(f"Total Executed in {(end-start) * 1000} ms")
+    return highlighted_img, value
+
 
 img = cv.imread("static.png") ##Todo replace with live image
 
-
-start = time.time()
-last = start
-
-img_gray = np.array(cv.cvtColor(img, cv.COLOR_BGR2GRAY) * 255, dtype="uint8")
-
-corners = detect_corners(img_gray)
-img_transformed = transform_homography_image(img, corners)
-mask, areas = find_coins(img_transformed)
-value = count_coins(areas)
-
-mask = transform_homography_mask(mask, corners)
-mask = cv.dilate(mask, np.ones((3,3), dtype="uint8"), iterations=2)
-
-highlighted_img = img
-highlighted_img[mask != 0] = [255, 0, 0]
-
-end = time.time()
-print(f"Total Executed in {(end-start) * 1000} ms")
+highlighted_img, value = process_image(img)
 
 plt.title(f"Value: {value} CHF")
 plt.imshow(highlighted_img)
