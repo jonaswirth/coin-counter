@@ -139,7 +139,7 @@ def detect_corners(img):
 
     log_step(canny_img)
 
-    lines = cv.HoughLines(canny_img, 1, np.pi / 180, 150)
+    lines = cv.HoughLines(canny_img, 1, np.pi / 180, 200)
 
     if lines is None or len(lines) < 4:
         return []
@@ -208,13 +208,20 @@ def find_coins(img):
     _, thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)
 
     log_step(thresh)
+
+    #Fill holes
+    kernel =  np.ones((3,3), dtype="uint8")
+    opening = cv.morphologyEx(thresh,cv.MORPH_OPEN,kernel, iterations = 3)
+
+    log_step(opening)
     
     #Get the starting points for the watershed
-    kernel =  np.ones((3,3), dtype="uint8")
-    opening = cv.morphologyEx(thresh,cv.MORPH_OPEN,kernel, iterations = 2)
     sure_bg = cv.dilate(thresh,kernel, iterations=3)
     dist_transform = cv.distanceTransform(opening,cv.DIST_L2,5)
-    ret, sure_fg = cv.threshold(dist_transform,0.7*dist_transform.max(),255,0)
+
+    log_step(dist_transform)
+
+    ret, sure_fg = cv.threshold(dist_transform,0.3*dist_transform.max(),255,0)
     sure_fg = np.array(sure_fg, dtype="uint8")
     unknown = cv.subtract(sure_bg, sure_fg)
 
@@ -279,6 +286,8 @@ def process_image(img):
 
     end = time.time()
     print(f"Total Executed in {(end-start) * 1000} ms")
+    global debug_step
+    debug_step = 1
     return highlighted_img
 
 
