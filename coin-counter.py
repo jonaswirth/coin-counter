@@ -2,9 +2,8 @@ import numpy as np
 import cv2 as cv
 import time
 import matplotlib.pyplot as plt
-from numpy import unravel_index
 import math
-from sklearn.cluster import KMeans
+import time
 
 DEBUG = False
 SAVE_OUTPUT = False
@@ -86,7 +85,7 @@ def find_intersections(lines):
         y0 = b * rho
         points_on_line.append([int(x0 + 1280*(-b)), int(y0 + 1280*(a)), int(x0 - 1280*(-b)), int(y0 - 1280*(a))])
     
-    points_on_line = np.array(points_on_line)
+    points_on_line = np.array(points_on_line, dtype="float32")
 
     #TODO: We don't need to calculate all intersections, it's enough to calculate the intersections between the vertical and horizontal lines
     intertections = []
@@ -126,30 +125,28 @@ def detect_corners(img):
     log_step(canny_img)
 
     lines = cv.HoughLines(canny_img, 1, np.pi / 180, 150)
+
     mapped_lines = []
     for i in range(0, len(lines)):
         rho = lines[i][0][0]
         theta = lines[i][0][1]
         mapped_lines.append([rho, theta])
     
-    lines = mapped_lines
+    lines = np.array(mapped_lines)
     
     printed_lines = print_hough_lines(canny_img.shape, lines)
     log_step(printed_lines)
 
     #TODO: Clustering only works well if there are only lines of the paper detected. Somehow outliers need to be removed
-    kmeans = KMeans(n_clusters=4)
-    kmeans.fit(mapped_lines)
-
-    lines = kmeans.cluster_centers_
+    _, _, lines = cv.kmeans(lines, 4, None, (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 10, 1.0), 10, cv.KMEANS_RANDOM_CENTERS)
 
     printed_lines = print_hough_lines(canny_img.shape, lines)
     log_step(printed_lines)
 
     intersections = find_intersections(lines)
 
-    kmeans.fit(intersections)
-    intersections = np.array(kmeans.cluster_centers_, dtype="uint32")
+    _, _, intersections = cv.kmeans(intersections, 4, None, (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 10, 1.0), 10, cv.KMEANS_RANDOM_CENTERS)
+    intersections = np.array(intersections, dtype="uint32")
 
     #TODO: handle debug and save output properly
     if DEBUG:
@@ -236,49 +233,22 @@ def count_coins(coins):
 
 img = cv.imread("static.png") ##Todo replace with live image
 
-import time
+
 start = time.time()
 last = start
 
 img_gray = np.array(cv.cvtColor(img, cv.COLOR_BGR2GRAY) * 255, dtype="uint8")
 
-now = time.time()
-print(f"Executed in {(now-last) * 1000} ms")
-last = now
-
 corners = detect_corners(img_gray)
-
-now = time.time()
-print(f"Corner detection in {(now-last) * 1000} ms")
-last = now
-
 img_transformed = transform_homography_image(img, corners)
-
-now = time.time()
-print(f"Homography transform in {(now-last) * 1000} ms")
-last = now
-
 mask, areas = find_coins(img_transformed)
-
-now = time.time()
-print(f"Find coins in {(now-last) * 1000} ms")
-last = now
-
 value = count_coins(areas)
-
-now = time.time()
-print(f"Count coins in {(now-last) * 1000} ms")
-last = now
 
 mask = transform_homography_mask(mask, corners)
 mask = cv.dilate(mask, np.ones((3,3), dtype="uint8"), iterations=2)
 
 highlighted_img = img
 highlighted_img[mask != 0] = [255, 0, 0]
-
-now = time.time()
-print(f"Highlight in {(now-last) * 1000} ms")
-last = now
 
 end = time.time()
 print(f"Total Executed in {(end-start) * 1000} ms")
