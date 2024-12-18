@@ -5,11 +5,12 @@ import matplotlib.pyplot as plt
 import math
 import time
 
-DEBUG = True
-SAVE_OUTPUT = False
 IMG_HEIGHT = 720
 IMG_WIDTH = 1280
 TRANSFOMRED_CORNERS = np.array([[0,0], [0, IMG_HEIGHT -1], [1018, 0], [1018, IMG_HEIGHT -1]], dtype="float32")
+
+debug = True
+save_output = False
 
 # Maps the coins surface area to their face value
 # Taken from https://www.snb.ch/de/the-snb/mandates-goals/cash/coins#t00
@@ -27,8 +28,8 @@ debug_step = 1
 def main():
     print("Capture start")
     #Disable debugging in live mode
-    global DEBUG
-    DEBUG = False
+    global debug
+    debug = False
     #cv.namedWindow("cam", cv.WINDOW_NORMAL)
     cap = cv.VideoCapture(1, cv.CAP_DSHOW)
     ret = cap.set(cv.CAP_PROP_FRAME_WIDTH, 1280)
@@ -51,22 +52,24 @@ def main():
     cv.destroyAllWindows()
 
 def capture(img):
-    global SAVE_OUTPUT
-    SAVE_OUTPUT = True
+    global save_output
+    save_output = True
     img = process_image(img)
     cv.imwrite("debug/capture.png", img)
-    SAVE_OUTPUT = False
+    save_output = False
 
-def log_step(img, cmap = "gray"):    
-    if not DEBUG and not SAVE_OUTPUT:
+def log_step(img, cmap = "gray", points = None):    
+    if not debug and not save_output:
         return
     
     global debug_step
     
     plt.imshow(img, cmap=cmap)
-    if DEBUG:
+    if points is not None:
+        plt.scatter(points[:, 0], points[:, 1])
+    if debug:
         plt.show()
-    if SAVE_OUTPUT:
+    if save_output:
         cv.imwrite(f"debug/step{debug_step}.png", img)
     debug_step += 1
 
@@ -139,7 +142,7 @@ def detect_corners(img):
 
     log_step(canny_img)
 
-    lines = cv.HoughLines(canny_img, 1, np.pi / 180, 200)
+    lines = cv.HoughLines(canny_img, 1, np.pi / 180, 150)
 
     if lines is None or len(lines) < 4:
         return []
@@ -169,12 +172,7 @@ def detect_corners(img):
     _, _, intersections = cv.kmeans(intersections, 4, None, (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 10, 1.0), 10, cv.KMEANS_RANDOM_CENTERS)
     intersections = np.array(intersections, dtype="uint32")
 
-    #TODO: handle debug and save output properly
-    if DEBUG:
-        plt.imshow(img, cmap="gray")
-        plt.scatter(intersections[:, 0], intersections[:, 1])
-        plt.savefig("debug/step4.png")
-        plt.show()
+    log_step(img, cmap="gray", points=intersections)
     
     #order corners
     intersections = intersections[intersections[:,0].argsort()]
@@ -279,7 +277,7 @@ def process_image(img):
     highlighted_img = img
     highlighted_img[mask != 0] = [255, 0, 0]
 
-    highlighted_img = cv.putText(highlighted_img, f"{value} CHF", (50,50), cv.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv.LINE_AA)
+    highlighted_img = cv.putText(highlighted_img, f"{'{0:.2f}'.format(value)} CHF", (50,50), cv.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv.LINE_AA)
 
     global debug_step
     debug_step = 1
