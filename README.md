@@ -24,7 +24,7 @@ Use canny edge detection to extract all edges:
 
 Then use hough lines to detect the sides of the paper. There are many matches because the lines might not be perfectly straight. Use K-Means clustering to build four clusters (one for each side of the paper) and use the cluster average.
 
-![image](doc/Hough_lines.png)
+![image](doc/hough_lines.png)
 
 ## 2. Homography transform
 The perspective is changed using the intersections of the hough lines using `cv.warpPerspective(...)`:
