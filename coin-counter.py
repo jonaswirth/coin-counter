@@ -10,7 +10,7 @@ IMG_WIDTH = 1280
 TRANSFOMRED_CORNERS = np.array([[0,0], [0, IMG_HEIGHT -1], [1018, 0], [1018, IMG_HEIGHT -1]], dtype="float32")
 
 debug = True
-save_output = False
+save_output = True
 
 # Maps the coins surface area to their face value
 # Taken from https://www.snb.ch/de/the-snb/mandates-goals/cash/coins#t00
@@ -292,5 +292,6 @@ main()
 # highlighted_img = process_image(img)
 
 # plt.imshow(highlighted_img)
+# cv.imwrite("debug/final.png", highlighted_img)
 # plt.show()
 
